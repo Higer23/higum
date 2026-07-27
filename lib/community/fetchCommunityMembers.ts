@@ -3,53 +3,85 @@ import { CommunityMember } from "@/types/communityMember";
 import { get, ref } from "firebase/database";
 
 /**
- * Retrieves all members of a community from Realtime Database.
+ * Retrieves all members of a community
+ * from Firebase Realtime Database.
  */
 export const fetchCommunityMembers = async (
   communityId: string
 ): Promise<CommunityMember[]> => {
   try {
-    const snapshot = await get(
+    const membersSnapshot = await get(
       ref(database, `communityMembers/${communityId}`)
     );
 
-    if (!snapshot.exists()) {
+    if (!membersSnapshot.exists()) {
       return [];
     }
 
-    const membersData = snapshot.val();
+    const membersData = membersSnapshot.val();
 
-    const members = await Promise.all(
-      Object.keys(membersData).map(async (uid) => {
-        const userSnapshot = await get(
-          ref(database, `users/${uid}`)
-        );
+    const members: CommunityMember[] = await Promise.all(
+      Object.entries(membersData).map(
+        async ([uid, member]: any) => {
+          const userSnapshot = await get(
+            ref(database, `users/${uid}`)
+          );
 
-        const userData = userSnapshot.exists()
-          ? userSnapshot.val()
-          : {};
+          const user = userSnapshot.exists()
+            ? userSnapshot.val()
+            : {};
 
-        return {
-          uid,
-          email: userData.email || "Unknown email",
-          displayName: userData.displayName || null,
-          imageURL: userData.photoURL || "",
-          isAdmin: membersData[uid].isAdmin || false,
-          joinedAt: membersData[uid].joinedAt || 0,
-        } as CommunityMember;
-      })
+          return {
+            uid,
+
+            email: user.email || "Unknown email",
+
+            displayName:
+              user.displayName ||
+              user.username ||
+              null,
+
+            imageURL:
+              user.photoURL ||
+              user.imageURL ||
+              "",
+
+            isAdmin: member.isAdmin || false,
+
+            joinedAt: member.joinedAt || 0,
+
+            status: member.status || "active",
+
+            karma: user.karma || 0,
+          } as CommunityMember;
+        }
+      )
     );
 
     members.sort((a, b) => {
-      const nameA = (a.displayName || a.email).toLowerCase();
-      const nameB = (b.displayName || b.email).toLowerCase();
+      // Önce adminler
+      if (a.isAdmin !== b.isAdmin) {
+        return a.isAdmin ? -1 : 1;
+      }
+
+      const nameA = (
+        a.displayName || a.email
+      ).toLowerCase();
+
+      const nameB = (
+        b.displayName || b.email
+      ).toLowerCase();
 
       return nameA.localeCompare(nameB);
     });
 
     return members;
   } catch (error) {
-    console.error("fetchCommunityMembers:", error);
+    console.error(
+      "fetchCommunityMembers:",
+      error
+    );
+
     return [];
   }
 };

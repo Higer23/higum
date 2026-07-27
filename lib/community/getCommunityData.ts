@@ -1,26 +1,38 @@
-import { firestore } from "@/firebase/clientApp";
-import { doc, getDoc } from "firebase/firestore";
+import { database } from "@/firebase/clientApp";
+import { get, ref } from "firebase/database";
 import safeJsonStringify from "safe-json-stringify";
 
 /**
- * Retrieves community data by id with JSON-safe serialization.
- * @param communityId - Id of the community to fetch.
- * @returns Community object or null if it does not exist.
+ * Retrieves community data from Realtime Database.
+ * @param communityId - Community id.
+ * @returns Community object or null.
  */
 export async function getCommunityData(communityId: string) {
   try {
-    const communityDocRef = doc(firestore, "communities", communityId);
-    const communityDoc = await getDoc(communityDocRef);
-
-    if (!communityDoc.exists()) {
+    if (!communityId) {
       return null;
     }
 
+    const snapshot = await get(
+      ref(database, `communities/${communityId}`)
+    );
+
+    if (!snapshot.exists()) {
+      return null;
+    }
+
+    const community = snapshot.val();
+
     return JSON.parse(
-      safeJsonStringify({ id: communityDoc.id, ...communityDoc.data() })
+      safeJsonStringify({
+        id: communityId,
+        ...community,
+      })
     );
   } catch (error) {
-    console.log("Error: getCommunityData", error);
-    throw error;
+    console.error("Error: getCommunityData", error);
+    return null;
   }
 }
+
+export default getCommunityData;

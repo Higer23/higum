@@ -2,7 +2,7 @@ import { database } from "@/firebase/clientApp";
 import { Post, PostVote } from "@/types/post";
 import {
   ref,
-  get,
+  runTransaction,
   set,
   remove,
   update,
@@ -19,11 +19,9 @@ export const handlePostVote = async (
 
   let newVote: PostVote | undefined;
 
-  let voteIdToDelete: string |undefined;
+  let voteIdToDelete: string | undefined;
 
-  const voteId =
-    existingVote?.id ??
-    `${userId}_${post.id}`;
+  const voteId = existingVote?.id ?? `${userId}_${post.id}`;
 
   const voteRef = ref(
     database,
@@ -39,14 +37,11 @@ export const handlePostVote = async (
     };
 
     await set(voteRef, newVote);
-
-    voteChange = vote;
   } else {
     if (existingVote.voteValue === vote) {
       await remove(voteRef);
 
       voteChange = -vote;
-
       voteIdToDelete = existingVote.id;
     } else {
       await update(voteRef, {
@@ -62,22 +57,15 @@ export const handlePostVote = async (
     }
   }
 
-  const postVoteRef = ref(
+  // Oy sayısını güvenli şekilde güncelle
+  const voteStatusRef = ref(
     database,
     `posts/${post.id}/voteStatus`
   );
 
-  const snapshot = await get(postVoteRef);
-
-  const currentVoteStatus =
-    snapshot.exists()
-      ? snapshot.val()
-      : 0;
-
-  await set(
-    postVoteRef,
-    currentVoteStatus + voteChange
-  );
+  await runTransaction(voteStatusRef, (currentValue) => {
+    return (currentValue || 0) + voteChange;
+  });
 
   return {
     voteChange,

@@ -1,23 +1,50 @@
-import { firestore } from "@/firebase/clientApp";
-import { doc, increment, writeBatch } from "firebase/firestore";
+import { database } from "@/firebase/clientApp";
+import {
+  ref,
+  remove,
+  runTransaction,
+} from "firebase/database";
 
 /**
- * Removes a user from a community by deleting their membership snippet and decrementing the member count.
- * This operation is performed as a batch write to ensure data consistency.
- * @param userId - The unique identifier of the user leaving the community.
- * @param communityId - The unique identifier of the community being left.
- * @returns A promise that resolves when the batch write is successfully committed.
+ * Removes a user from a community.
+ * Deletes the membership entry and safely decrements
+ * the community member count.
  */
-export const leaveCommunity = async (userId: string, communityId: string) => {
-  const batch = writeBatch(firestore);
-
-  batch.delete(
-    doc(firestore, `users/${userId}/communitySnippets`, communityId)
+export const leaveCommunity = async (
+  userId: string,
+  communityId: string
+): Promise<void> => {
+  // Kullanıcının community üyeliğini sil
+  await remove(
+    ref(
+      database,
+      `communityMembers/${communityId}/${userId}`
+    )
   );
 
-  batch.update(doc(firestore, "communities", communityId), {
-    numberOfMembers: increment(-1),
-  });
+  // Kullanıcının snippet'ını sil
+  await remove(
+    ref(
+      database,
+      `users/${userId}/communitySnippets/${communityId}`
+    )
+  );
 
-  await batch.commit();
+  // Üye sayısını güvenli şekilde azalt
+  const memberCountRef = ref(
+    database,
+    `communities/${communityId}/numberOfMembers`
+  );
+
+  await runTransaction(memberCountRef, (count) => {
+    const current = count || 0;
+
+    if (current <= 0) {
+      return 0;
+    }
+
+    return current - 1;
+  });
 };
+
+export default leaveCommunity;

@@ -1,33 +1,37 @@
-import { firestore } from "@/firebase/clientApp";
-import { doc, increment, writeBatch } from "firebase/firestore";
+import { database } from "@/firebase/clientApp";
+import { get, ref, remove, runTransaction } from "firebase/database";
 
 /**
- * Deletes a comment and all its threaded descendants, then updates the post's comment count.
- * This ensures that deleting a parent comment also removes all replies associated with it.
- * All deletions and the count update are performed in a Firestore batch.
- * @param commentId - The unique identifier of the comment to be deleted.
- * @param postId - The unique identifier of the post the comment belongs to.
- * @param descendantIds - An array of identifiers for all child comments to be deleted.
- * @returns A promise that resolves to the total number of comments deleted.
+ * Deletes a comment and all of its descendants from Realtime Database.
+ * Also decreases the comment count on the related post.
  */
 export const deleteComment = async (
   commentId: string,
   postId: string,
   descendantIds: string[]
-) => {
-  const batch = writeBatch(firestore);
+): Promise<number> => {
   const allIdsToDelete = [commentId, ...descendantIds];
 
-  allIdsToDelete.forEach((id) => {
-    const commentDocRef = doc(firestore, "comments", id);
-    batch.delete(commentDocRef);
+  // Yorumu ve alt yorumları sil
+  await Promise.all(
+    allIdsToDelete.map((id) =>
+      remove(ref(database, `comments/${id}`))
+    )
+  );
+
+  // numberOfComments değerini güncelle
+  const postRef = ref(database, `posts/${postId}`);
+
+  await runTransaction(postRef, (post: any) => {
+    if (post) {
+      post.numberOfComments = Math.max(
+        0,
+        (post.numberOfComments || 0) - allIdsToDelete.length
+      );
+    }
+
+    return post;
   });
 
-  const postDocRef = doc(firestore, "posts", postId);
-  batch.update(postDocRef, {
-    numberOfComments: increment(-allIdsToDelete.length),
-  });
-
-  await batch.commit();
   return allIdsToDelete.length;
 };

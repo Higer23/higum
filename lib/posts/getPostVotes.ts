@@ -3,14 +3,21 @@ import { PostVote } from "@/types/post";
 import { get, ref } from "firebase/database";
 
 /**
- * Kullanıcının belirtilen postlara verdiği oyları getirir.
+ * Retrieves all votes for the specified posts cast by a user
+ * from Realtime Database.
  */
 export const getPostVotes = async (
   userId: string,
   postIds: string[]
 ): Promise<PostVote[]> => {
   try {
-    const snapshot = await get(ref(database, `postVotes/${userId}`));
+    if (!userId || postIds.length === 0) {
+      return [];
+    }
+
+    const snapshot = await get(
+      ref(database, `postVotes/${userId}`)
+    );
 
     if (!snapshot.exists()) {
       return [];
@@ -23,11 +30,15 @@ export const getPostVotes = async (
         id,
         ...(value as PostVote),
       }))
-      .filter((vote) => postIds.includes(vote.postId));
+      .filter(
+        (vote) =>
+          vote.postId &&
+          postIds.includes(vote.postId)
+      );
 
     return votes;
   } catch (error) {
-    console.error("getPostVotes:", error);
+    console.error("Error getting post votes:", error);
     return [];
   }
 };

@@ -1,33 +1,53 @@
-import { firestore } from "@/firebase/clientApp";
-import { doc, increment, writeBatch } from "firebase/firestore";
+import { database } from "@/firebase/clientApp";
+import {
+  ref,
+  remove,
+  runTransaction,
+} from "firebase/database";
 
 /**
- * Removes a user from a community by deleting their membership snippet and decrementing the member count.
- * This is typically used by community administrators to moderate the member list.
- * @param communityId - The unique identifier of the community.
- * @param memberId - The unique identifier of the user to be removed.
- * @returns A promise that resolves when the removal batch write is successfully committed.
+ * Removes a member from a community.
+ * Deletes membership records and safely updates
+ * the community member count.
  */
 export const removeCommunityMember = async (
   communityId: string,
   memberId: string
-) => {
+): Promise<void> => {
   try {
-    const batch = writeBatch(firestore);
-
-    // Delete the user's community snippet
-    batch.delete(
-      doc(firestore, `users/${memberId}/communitySnippets`, communityId)
+    // Community üyeliğini sil
+    await remove(
+      ref(
+        database,
+        `communityMembers/${communityId}/${memberId}`
+      )
     );
 
-    // Decrement the community member count
-    batch.update(doc(firestore, "communities", communityId), {
-      numberOfMembers: increment(-1),
-    });
+    // Kullanıcının snippet'ını sil
+    await remove(
+      ref(
+        database,
+        `users/${memberId}/communitySnippets/${communityId}`
+      )
+    );
 
-    await batch.commit();
+    // Üye sayısını azalt
+    const memberCountRef = ref(
+      database,
+      `communities/${communityId}/numberOfMembers`
+    );
+
+    await runTransaction(memberCountRef, (count: any) => {
+      const current = Number(count || 0);
+      return current > 0 ? current - 1 : 0;
+    });
   } catch (error) {
-    console.error("Error removing community member", error);
+    console.error(
+      "removeCommunityMember:",
+      error
+    );
     throw error;
   }
 };
+
+export default removeCommunityMember;

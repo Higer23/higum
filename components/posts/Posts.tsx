@@ -65,7 +65,7 @@ const Posts: React.FC<PostsProps> = ({ communityData }) => {
           {!noMorePosts ? (
             <Button
               onClick={() => fetchPosts()}
-              loading={loading}
+              isLoading={loading}
               variant="outline"
               width="100%"
               my={4}

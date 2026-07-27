@@ -2,7 +2,6 @@ import { database } from "@/firebase/clientApp";
 import { Comment } from "@/types/comment";
 import { User } from "firebase/auth";
 import {
-  get,
   push,
   ref,
   runTransaction,
@@ -10,8 +9,7 @@ import {
 } from "firebase/database";
 
 /**
- * Creates a new comment in Realtime Database
- * and increases the post comment count.
+ * Creates a comment in Firebase Realtime Database.
  */
 export const createComment = async (
   user: User,
@@ -24,7 +22,7 @@ export const createComment = async (
 ): Promise<Comment> => {
   if (depth > 2) {
     throw new Error(
-      "Maximum comment depth reached. You cannot reply to this comment."
+      "Maximum comment depth reached."
     );
   }
 
@@ -33,35 +31,42 @@ export const createComment = async (
   const newComment: Comment = {
     id: commentRef.key!,
     creatorId: user.uid,
+
     creatorDisplayText:
-      user.displayName ||
-      user.email?.split("@")[0] ||
+      user.displayName ??
+      user.email?.split("@")[0] ??
       "Anonymous",
+
     communityId,
     postId,
     postTitle,
+
     text: commentText,
-    createdAt: Date.now() as any,
+
     depth,
-  };
 
-  if (parentId) {
-    newComment.parentId = parentId;
-  }
+    parentId: parentId ?? null,
 
-  // Yorumu kaydet
+    createdAt: Date.now(),
+
+    voteStatus: 0,
+
+    edited: false,
+  } as Comment;
+
   await set(commentRef, newComment);
 
-  // numberOfComments artır
-  const postRef = ref(database, `posts/${postId}`);
+  await runTransaction(
+    ref(database, `posts/${postId}`),
+    (post: any) => {
+      if (post == null) return post;
 
-  await runTransaction(postRef, (post: any) => {
-    if (post) {
       post.numberOfComments =
         (post.numberOfComments || 0) + 1;
+
+      return post;
     }
-    return post;
-  });
+  );
 
   return newComment;
 };

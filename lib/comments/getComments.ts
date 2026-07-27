@@ -1,33 +1,43 @@
 import { database } from "@/firebase/clientApp";
 import { Comment } from "@/types/comment";
-import { get, ref } from "firebase/database";
+import { get, query, ref, orderByChild, equalTo } from "firebase/database";
 
 /**
- * Retrieves all comments for a post from Realtime Database.
- * Comments are returned newest first.
+ * Retrieves all comments for a specific post
+ * from Firebase Realtime Database.
  */
 export const getComments = async (
   postId: string
 ): Promise<Comment[]> => {
-  const snapshot = await get(ref(database, "comments"));
-
-  if (!snapshot.exists()) {
-    return [];
-  }
-
-  const data = snapshot.val();
-
-  const comments: Comment[] = Object.entries(data)
-    .map(([id, value]) => ({
-      id,
-      ...(value as Comment),
-    }))
-    .filter((comment) => comment.postId === postId)
-    .sort(
-      (a, b) =>
-        Number(b.createdAt || 0) -
-        Number(a.createdAt || 0)
+  try {
+    const commentsQuery = query(
+      ref(database, "comments"),
+      orderByChild("postId"),
+      equalTo(postId)
     );
 
-  return comments;
+    const snapshot = await get(commentsQuery);
+
+    if (!snapshot.exists()) {
+      return [];
+    }
+
+    const data = snapshot.val();
+
+    const comments: Comment[] = Object.entries(data)
+      .map(([id, value]) => ({
+        id,
+        ...(value as Comment),
+      }))
+      .sort(
+        (a, b) =>
+          Number(b.createdAt ?? 0) -
+          Number(a.createdAt ?? 0)
+      );
+
+    return comments;
+  } catch (error) {
+    console.error("getComments:", error);
+    return [];
+  }
 };

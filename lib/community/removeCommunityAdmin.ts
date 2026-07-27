@@ -1,36 +1,62 @@
-import { firestore } from "@/firebase/clientApp";
-import { arrayRemove, doc, getDoc, writeBatch } from "firebase/firestore";
+import { database } from "@/firebase/clientApp";
+import {
+  get,
+  ref,
+  runTransaction,
+  update,
+} from "firebase/database";
 
 /**
- * Demotes a user from an admin role within a specific community.
- * This function removes the user from the community's admin list and updates their membership snippet.
- * The user remains a member of the community but loses administrative privileges.
- * @param communityId - The unique identifier of the community.
- * @param userId - The unique identifier of the user to be demoted.
- * @returns A promise that resolves when the demotion batch write is complete.
+ * Removes admin permission from a community member.
+ * User remains in the community.
  */
 export const removeCommunityAdmin = async (
   communityId: string,
   userId: string
 ): Promise<void> => {
-  const snippetRef = doc(
-    firestore,
-    `users/${userId}/communitySnippets/${communityId}`
+  // Community mevcut mu?
+  const communityRef = ref(
+    database,
+    `communities/${communityId}`
   );
-  const snippetDoc = await getDoc(snippetRef);
 
-  const batch = writeBatch(firestore);
-  const communityRef = doc(firestore, "communities", communityId);
+  const communitySnapshot = await get(communityRef);
 
-  batch.update(communityRef, {
-    adminIds: arrayRemove(userId),
-  });
-
-  if (snippetDoc.exists()) {
-    batch.update(snippetRef, {
-      isAdmin: false,
-    });
+  if (!communitySnapshot.exists()) {
+    throw new Error("Community not found.");
   }
 
-  await batch.commit();
+  // Admin listesinden kaldır
+  await runTransaction(
+    ref(database, `communities/${communityId}/adminIds`),
+    (admins: string[] | null) => {
+      if (!admins) return [];
+
+      return admins.filter((id) => id !== userId);
+    }
+  );
+
+  // communityMembers güncelle
+  await update(
+    ref(
+      database,
+      `communityMembers/${communityId}/${userId}`
+    ),
+    {
+      isAdmin: false,
+    }
+  );
+
+  // Kullanıcının snippetını güncelle
+  await update(
+    ref(
+      database,
+      `users/${userId}/communitySnippets/${communityId}`
+    ),
+    {
+      isAdmin: false,
+    }
+  );
 };
+
+export default removeCommunityAdmin;

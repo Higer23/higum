@@ -1,76 +1,77 @@
 import { database } from "@/firebase/clientApp";
 import {
-  ref,
   get,
-  update,
+  ref,
   runTransaction,
+  update,
 } from "firebase/database";
 
 /**
- * Promotes a user to administrator in a community.
- * If the user is not already a member,
- * they are added automatically.
+ * Promotes a user to admin in Realtime Database.
  */
 export const addCommunityAdmin = async (
   communityId: string,
   userId: string,
   communityImageURL?: string
 ): Promise<void> => {
-  const now = Date.now();
+  const memberRef = ref(
+    database,
+    `communityMembers/${communityId}/${userId}`
+  );
 
-  try {
-    const memberRef = ref(
-      database,
-      `communityMembers/${communityId}/${userId}`
-    );
+  const memberSnapshot = await get(memberRef);
 
-    const memberSnapshot = await get(memberRef);
-
-    // Kullanıcı üye değilse oluştur
-    if (!memberSnapshot.exists()) {
-      await update(ref(database), {
-        [`communityMembers/${communityId}/${userId}`]: {
-          uid: userId,
-          communityId,
-          imageURL: communityImageURL || "",
-          isAdmin: true,
-          joinedAt: now,
-          status: "active",
-        },
-
-        [`users/${userId}/communitySnippets/${communityId}`]: {
-          communityId,
-          imageURL: communityImageURL || "",
-          isAdmin: true,
-          joinedAt: now,
-        },
-      });
-
-      // Üye sayısını artır
-      await runTransaction(
-        ref(
-          database,
-          `communities/${communityId}/numberOfMembers`
-        ),
-        (count: any) => (count || 0) + 1
-      );
-    } else {
-      // Zaten üyeyse sadece admin yap
-      await update(ref(database), {
-        [`communityMembers/${communityId}/${userId}/isAdmin`]: true,
-
-        [`users/${userId}/communitySnippets/${communityId}/isAdmin`]: true,
-      });
-    }
-
-    // Moderatör listesine ekle
-    await update(ref(database), {
-      [`communities/${communityId}/moderators/${userId}`]: true,
+  if (memberSnapshot.exists()) {
+    await update(memberRef, {
+      isAdmin: true,
     });
-  } catch (error) {
-    console.error("addCommunityAdmin:", error);
-    throw error;
+
+    await update(
+      ref(
+        database,
+        `users/${userId}/communitySnippets/${communityId}`
+      ),
+      {
+        isAdmin: true,
+      }
+    );
+  } else {
+    await update(ref(database), {
+      [`communityMembers/${communityId}/${userId}`]: {
+        uid: userId,
+        communityId,
+        imageURL: communityImageURL || "",
+        isAdmin: true,
+        joinedAt: Date.now(),
+      },
+
+      [`users/${userId}/communitySnippets/${communityId}`]: {
+        communityId,
+        imageURL: communityImageURL || "",
+        isAdmin: true,
+        joinedAt: Date.now(),
+      },
+    });
+
+    await runTransaction(
+      ref(
+        database,
+        `communities/${communityId}/numberOfMembers`
+      ),
+      (count) => (count || 0) + 1
+    );
   }
+
+  await runTransaction(
+    ref(database, `communities/${communityId}/adminIds`),
+    (admins: any) => {
+      if (!admins) admins = {};
+
+      admins[userId] = true;
+
+      return admins;
+    }
+  );
 };
 
 export default addCommunityAdmin;

@@ -1,15 +1,17 @@
 import { postStateAtom } from "@/atoms/postsAtom";
 import { useSetAtom } from "jotai";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import useCustomToast from "../useCustomToast";
 import { Post } from "@/types/post";
-import { getPosts as getPostsLib } from "@/lib/posts/getPosts";
+import { getPosts } from "@/lib/posts/getPosts";
 
 type UsePostsFeedProps = {
   communityId?: string;
   communityIds?: string[];
   isGenericHome?: boolean;
 };
+
+const PAGE_SIZE = 10;
 
 const usePostsFeed = ({
   communityId,
@@ -23,37 +25,46 @@ const usePostsFeed = ({
 
   const showToast = useCustomToast();
 
-  const fetchPosts = async () => {
+  const fetchPosts = useCallback(async () => {
     if (loading) return;
 
     setLoading(true);
 
     try {
-      const { posts } = await getPostsLib(
+      const result = await getPosts(
         communityId,
         communityIds,
         isGenericHome
       );
 
+      const posts = (result?.posts || []) as Post[];
+
       setPostStateValue((prev) => ({
         ...prev,
-        posts: posts as Post[],
+        posts,
       }));
 
-      // Eğer 10'dan az post geldiyse daha fazla yok demektir.
-      setNoMorePosts(posts.length < 10);
+      setNoMorePosts(posts.length < PAGE_SIZE);
     } catch (error: any) {
-      console.error("Error fetching posts:", error);
+      console.error("usePostsFeed:", error);
 
       showToast({
-        title: "Could not Fetch Posts",
-        description: error?.message || "There was an error fetching posts",
+        title: "Posts could not be loaded",
+        description:
+          error?.message ?? "An unexpected error occurred while loading posts.",
         status: "error",
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    loading,
+    communityId,
+    communityIds,
+    isGenericHome,
+    setPostStateValue,
+    showToast,
+  ]);
 
   useEffect(() => {
     setNoMorePosts(false);
@@ -62,7 +73,12 @@ const usePostsFeed = ({
       ...prev,
       posts: [],
     }));
-  }, [communityId, communityIds, isGenericHome, setPostStateValue]);
+  }, [
+    communityId,
+    communityIds,
+    isGenericHome,
+    setPostStateValue,
+  ]);
 
   return {
     loading,

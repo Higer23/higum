@@ -1,39 +1,74 @@
-import { firestore } from "@/firebase/clientApp";
+import { database } from "@/firebase/clientApp";
 import { CommunitySnippet } from "@/types/community";
-import { doc, increment, writeBatch } from "firebase/firestore";
+import {
+  ref,
+  runTransaction,
+  update,
+} from "firebase/database";
 
 /**
- * Joins a user to a community by creating a membership snippet and incrementing the member count.
- * This operation is performed as a batch write to ensure data consistency.
- * @param userId - The unique identifier of the user joining the community.
- * @param communityId - The unique identifier of the community being joined.
- * @param communityImageURL - The current image URL of the community to be stored in the user's snippet.
- * @param isCreatorOrAdmin - Whether the user should be granted admin privileges upon joining.
- * @returns A promise that resolves to the newly created community snippet.
+ * Joins a user to a community.
+ * Creates the user's membership and safely increments the
+ * community member count.
  */
 export const joinCommunity = async (
   userId: string,
   communityId: string,
   communityImageURL: string,
   isCreatorOrAdmin: boolean
-) => {
-  const batch = writeBatch(firestore);
-
+): Promise<CommunitySnippet> => {
   const newSnippet: CommunitySnippet = {
-    communityId: communityId,
+    communityId,
     imageURL: communityImageURL || "",
     isAdmin: isCreatorOrAdmin,
   };
 
-  batch.set(
-    doc(firestore, `users/${userId}/communitySnippets`, communityId),
-    newSnippet
+  // Kullanıcı zaten üye mi?
+  const memberRef = ref(
+    database,
+    `communityMembers/${communityId}/${userId}`
   );
 
-  batch.update(doc(firestore, "communities", communityId), {
-    numberOfMembers: increment(1),
+  const result = await runTransaction(memberRef, (member: any) => {
+    if (member !== null) {
+      return;
+    }
+
+    return {
+      uid: userId,
+      communityId,
+      imageURL: communityImageURL || "",
+      isAdmin: isCreatorOrAdmin,
+      joinedAt: Date.now(),
+    };
   });
 
-  await batch.commit();
+  // Zaten üyeyse tekrar ekleme
+  if (!result.committed) {
+    return newSnippet;
+  }
+
+  // Kullanıcı snippet'ı + topluluk üye sayısını güncelle
+  await update(ref(database), {
+    [`users/${userId}/communitySnippets/${communityId}`]: {
+      communityId,
+      imageURL: communityImageURL || "",
+      isAdmin: isCreatorOrAdmin,
+      joinedAt: Date.now(),
+    },
+  });
+
+  // Üye sayısını güvenli şekilde arttır
+  const memberCountRef = ref(
+    database,
+    `communities/${communityId}/numberOfMembers`
+  );
+
+  await runTransaction(memberCountRef, (count) => {
+    return (count || 0) + 1;
+  });
+
   return newSnippet;
 };
+
+export default joinCommunity;

@@ -1,5 +1,4 @@
 import { postStateAtom } from "@/atoms/postsAtom";
-import { DocumentData, QueryDocumentSnapshot } from "firebase/firestore";
 import { useSetAtom } from "jotai";
 import { useEffect, useState } from "react";
 import useCustomToast from "../useCustomToast";
@@ -20,47 +19,30 @@ const usePostsFeed = ({
   const setPostStateValue = useSetAtom(postStateAtom);
 
   const [loading, setLoading] = useState(false);
-  const [lastVisible, setLastVisible] =
-    useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [noMorePosts, setNoMorePosts] = useState(false);
 
   const showToast = useCustomToast();
 
-  const fetchPosts = async (initial = false) => {
+  const fetchPosts = async () => {
     if (loading) return;
-    if (!initial && noMorePosts) return;
-    if (!initial && !lastVisible) return;
 
     setLoading(true);
 
     try {
-      const { posts, newLastVisible } = await getPostsLib(
+      const { posts } = await getPostsLib(
         communityId,
         communityIds,
-        isGenericHome,
-        initial ? null : lastVisible
+        isGenericHome
       );
 
-      if (initial) {
-        setPostStateValue((prev) => ({
-          ...prev,
-          posts: posts as Post[],
-        }));
-      } else {
-        setPostStateValue((prev) => ({
-          ...prev,
-          posts: [...prev.posts, ...(posts as Post[])],
-        }));
-      }
+      setPostStateValue((prev) => ({
+        ...prev,
+        posts: posts as Post[],
+      }));
 
-      if (newLastVisible) {
-        setLastVisible(newLastVisible);
-      }
-
-      setNoMorePosts(posts.length < 10);
+      setNoMorePosts(true);
     } catch (error: any) {
-      console.error("Firestore Error:", error);
-      alert(error?.message || "Unknown Firestore Error");
+      console.error(error);
 
       showToast({
         title: "Could not Fetch Posts",
@@ -74,7 +56,6 @@ const usePostsFeed = ({
 
   useEffect(() => {
     setNoMorePosts(false);
-    setLastVisible(null);
 
     setPostStateValue((prev) => ({
       ...prev,

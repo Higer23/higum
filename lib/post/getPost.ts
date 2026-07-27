@@ -4,25 +4,33 @@ import safeJsonStringify from "safe-json-stringify";
 import { Post } from "@/types/post";
 
 /**
- * Retrieves a single post by its unique identifier from Firestore.
- * The returned object is serialized using `safe-json-stringify` to ensure it is safe for Next.js server-side props.
- * @param postId - The unique identifier of the post to be retrieved.
- * @returns A promise that resolves to the post object if found, or null if it does not exist or an error occurs.
+ * Gets a single post by id.
  */
-export async function getPost(postId: string) {
+export async function getPost(postId: string): Promise<Post | null> {
   try {
-    const postDocRef = doc(firestore, "posts", postId);
-    const postDoc = await getDoc(postDocRef);
-
-    if (!postDoc.exists()) {
+    if (!postId) {
+      console.error("getPost: postId is empty");
       return null;
     }
 
+    const postRef = doc(firestore, "posts", postId);
+    const postSnap = await getDoc(postRef);
+
+    if (!postSnap.exists()) {
+      console.error(`getPost: Post not found (${postId})`);
+      return null;
+    }
+
+    const post = {
+      id: postSnap.id,
+      ...postSnap.data(),
+    };
+
     return JSON.parse(
-      safeJsonStringify({ id: postDoc.id, ...postDoc.data() })
+      safeJsonStringify(post)
     ) as Post;
   } catch (error) {
-    console.log("Error: getPost", error);
+    console.error("getPost failed:", error);
     return null;
   }
 }

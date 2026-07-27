@@ -1,23 +1,33 @@
-import { firestore } from "@/firebase/clientApp";
+import { database } from "@/firebase/clientApp";
 import { Comment } from "@/types/comment";
-import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
+import { get, ref } from "firebase/database";
 
 /**
- * Retrieves all comments for a specific post, ordered by creation time in descending order.
- * This is used to populate the comment section of a post detail page.
- * @param postId - The unique identifier of the post whose comments are being retrieved.
- * @returns A promise that resolves to an array of comment objects.
+ * Retrieves all comments for a post from Realtime Database.
+ * Comments are returned newest first.
  */
-export const getComments = async (postId: string) => {
-  const commentsQuery = query(
-    collection(firestore, "comments"),
-    where("postId", "==", postId),
-    orderBy("createdAt", "desc")
-  );
-  const commentDocs = await getDocs(commentsQuery);
-  const comments = commentDocs.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-  })) as Comment[];
+export const getComments = async (
+  postId: string
+): Promise<Comment[]> => {
+  const snapshot = await get(ref(database, "comments"));
+
+  if (!snapshot.exists()) {
+    return [];
+  }
+
+  const data = snapshot.val();
+
+  const comments: Comment[] = Object.entries(data)
+    .map(([id, value]) => ({
+      id,
+      ...(value as Comment),
+    }))
+    .filter((comment) => comment.postId === postId)
+    .sort(
+      (a, b) =>
+        Number(b.createdAt || 0) -
+        Number(a.createdAt || 0)
+    );
+
   return comments;
 };

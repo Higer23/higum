@@ -8,8 +8,8 @@ import {
 
 /**
  * Joins a user to a community.
- * Creates the user's membership and safely increments the
- * community member count.
+ * Creates the membership if it does not already exist
+ * and safely increments the member count.
  */
 export const joinCommunity = async (
   userId: string,
@@ -17,58 +17,69 @@ export const joinCommunity = async (
   communityImageURL: string,
   isCreatorOrAdmin: boolean
 ): Promise<CommunitySnippet> => {
+  const now = Date.now();
+
   const newSnippet: CommunitySnippet = {
     communityId,
     imageURL: communityImageURL || "",
     isAdmin: isCreatorOrAdmin,
   };
 
-  // Kullanıcı zaten üye mi?
-  const memberRef = ref(
-    database,
-    `communityMembers/${communityId}/${userId}`
-  );
+  try {
+    // Kullanıcı zaten üye mi?
+    const memberRef = ref(
+      database,
+      `communityMembers/${communityId}/${userId}`
+    );
 
-  const result = await runTransaction(memberRef, (member: any) => {
-    if (member !== null) {
-      return;
+    const result = await runTransaction(
+      memberRef,
+      (member: any) => {
+        if (member !== null) {
+          return;
+        }
+
+        return {
+          uid: userId,
+          communityId,
+          imageURL: communityImageURL || "",
+          isAdmin: isCreatorOrAdmin,
+          joinedAt: now,
+          status: "active",
+        };
+      }
+    );
+
+    // Kullanıcı zaten üyeyse tekrar ekleme
+    if (!result.committed) {
+      return newSnippet;
     }
 
-    return {
-      uid: userId,
-      communityId,
-      imageURL: communityImageURL || "",
-      isAdmin: isCreatorOrAdmin,
-      joinedAt: Date.now(),
-    };
-  });
+    // Kullanıcının snippet'ını oluştur
+    await update(ref(database), {
+      [`users/${userId}/communitySnippets/${communityId}`]: {
+        communityId,
+        imageURL: communityImageURL || "",
+        isAdmin: isCreatorOrAdmin,
+        joinedAt: now,
+      },
+    });
 
-  // Zaten üyeyse tekrar ekleme
-  if (!result.committed) {
+    // Üye sayısını güvenli şekilde artır
+    const memberCountRef = ref(
+      database,
+      `communities/${communityId}/numberOfMembers`
+    );
+
+    await runTransaction(memberCountRef, (count: any) => {
+      return (count || 0) + 1;
+    });
+
     return newSnippet;
+  } catch (error) {
+    console.error("joinCommunity:", error);
+    throw error;
   }
-
-  // Kullanıcı snippet'ı + topluluk üye sayısını güncelle
-  await update(ref(database), {
-    [`users/${userId}/communitySnippets/${communityId}`]: {
-      communityId,
-      imageURL: communityImageURL || "",
-      isAdmin: isCreatorOrAdmin,
-      joinedAt: Date.now(),
-    },
-  });
-
-  // Üye sayısını güvenli şekilde arttır
-  const memberCountRef = ref(
-    database,
-    `communities/${communityId}/numberOfMembers`
-  );
-
-  await runTransaction(memberCountRef, (count) => {
-    return (count || 0) + 1;
-  });
-
-  return newSnippet;
 };
 
 export default joinCommunity;

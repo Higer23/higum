@@ -1,13 +1,15 @@
 import { database } from "@/firebase/clientApp";
 import { get, ref } from "firebase/database";
 import safeJsonStringify from "safe-json-stringify";
+import { Community } from "@/types/community";
 
 /**
- * Retrieves community data from Realtime Database.
- * @param communityId - Community id.
- * @returns Community object or null.
+ * Retrieves a community from Firebase Realtime Database.
+ * Returns null if the community does not exist.
  */
-export async function getCommunityData(communityId: string) {
+export const getCommunityData = async (
+  communityId: string
+): Promise<Community | null> => {
   try {
     if (!communityId) {
       return null;
@@ -21,18 +23,18 @@ export async function getCommunityData(communityId: string) {
       return null;
     }
 
-    const community = snapshot.val();
+    const community: Community = {
+      id: communityId,
+      ...(snapshot.val() as Community),
+    };
 
     return JSON.parse(
-      safeJsonStringify({
-        id: communityId,
-        ...community,
-      })
-    );
+      safeJsonStringify(community)
+    ) as Community;
   } catch (error) {
-    console.error("Error: getCommunityData", error);
+    console.error("getCommunityData:", error);
     return null;
   }
-}
+};
 
 export default getCommunityData;

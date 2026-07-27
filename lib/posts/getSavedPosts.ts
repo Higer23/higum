@@ -1,20 +1,29 @@
-import { firestore } from "@/firebase/clientApp";
+import { database } from "@/firebase/clientApp";
 import { SavedPost } from "@/types/savedPost";
-import { collection, getDocs } from "firebase/firestore";
+import { get, ref } from "firebase/database";
 
 /**
- * Retrieves all posts saved by a specific user from their personal 'savedPosts' subcollection.
- * This is used to populate the 'Saved' tab in the user's profile or dashboard.
- * @param userId - The unique identifier of the user whose saved posts are being retrieved.
- * @returns A promise that resolves to an array of saved post objects.
+ * Retrieves all posts saved by a user from Realtime Database.
  */
-export const getSavedPosts = async (userId: string) => {
-  const querySnapshot = await getDocs(
-    collection(firestore, `users/${userId}/savedPosts`)
+export const getSavedPosts = async (
+  userId: string
+): Promise<SavedPost[]> => {
+  const snapshot = await get(
+    ref(database, `savedPosts/${userId}`)
   );
-  const savedPosts = querySnapshot.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-  })) as SavedPost[];
+
+  if (!snapshot.exists()) {
+    return [];
+  }
+
+  const data = snapshot.val();
+
+  const savedPosts: SavedPost[] = Object.entries(data).map(
+    ([id, value]) => ({
+      id,
+      ...(value as SavedPost),
+    })
+  );
+
   return savedPosts;
 };

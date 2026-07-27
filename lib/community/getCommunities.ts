@@ -1,53 +1,76 @@
-import { firestore } from "@/firebase/clientApp";
+import { database } from "@/firebase/clientApp";
 import { Community } from "@/types/community";
-import {
-  collection,
-  DocumentData,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  QueryDocumentSnapshot,
-  startAfter,
-} from "firebase/firestore";
+import { get, ref } from "firebase/database";
 
 /**
- * Fetches a paginated list of communities, ordered by the number of members in descending order.
- * This is used for the community discovery feed and recommendations.
- * @param limitValue - The maximum number of communities to retrieve in a single request.
- * @param lastVisible - The Firestore document snapshot to start the query after (for pagination).
- * @returns A promise that resolves to an object containing the array of communities and the next pagination cursor.
+ * Retrieves communities from Realtime Database,
+ * ordered by member count (highest first).
  */
 export const getCommunities = async (
   limitValue: number,
-  lastVisible?: QueryDocumentSnapshot<DocumentData> | null
+  lastVisible?: string | null
 ) => {
-  let communityQuery;
-  if (!lastVisible) {
-    communityQuery = query(
-      collection(firestore, "communities"),
-      orderBy("numberOfMembers", "desc"),
-      limit(limitValue)
+  try {
+    const snapshot = await get(ref(database, "communities"));
+
+    if (!snapshot.exists()) {
+      return {
+        communities: [],
+        newLastVisible: null,
+      };
+    }
+
+    const data = snapshot.val();
+
+    let communities: Community[] = Object.entries(data).map(
+      ([id, value]) => ({
+        id,
+        ...(value as Community),
+      })
     );
-  } else {
-    communityQuery = query(
-      collection(firestore, "communities"),
-      orderBy("numberOfMembers", "desc"),
-      startAfter(lastVisible),
-      limit(limitValue)
+
+    // Üye sayısına göre büyükten küçüğe sırala
+    communities.sort(
+      (a, b) =>
+        (b.numberOfMembers || 0) -
+        (a.numberOfMembers || 0)
     );
+
+    // Sayfalama (isteğe bağlı)
+    let startIndex = 0;
+
+    if (lastVisible) {
+      const index = communities.findIndex(
+        (community) => community.id === lastVisible
+      );
+
+      if (index !== -1) {
+        startIndex = index + 1;
+      }
+    }
+
+    const result = communities.slice(
+      startIndex,
+      startIndex + limitValue
+    );
+
+    const newLastVisible =
+      result.length > 0
+        ? result[result.length - 1].id
+        : null;
+
+    return {
+      communities: result,
+      newLastVisible,
+    };
+  } catch (error) {
+    console.error("Error getting communities:", error);
+
+    return {
+      communities: [],
+      newLastVisible: null,
+    };
   }
-
-  const communityDocs = await getDocs(communityQuery);
-  const communities = communityDocs.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-  })) as Community[];
-
-  const newLastVisible =
-    communityDocs.docs.length > 0
-      ? communityDocs.docs[communityDocs.docs.length - 1]
-      : null;
-
-  return { communities, newLastVisible };
 };
+
+export default getCommunities;

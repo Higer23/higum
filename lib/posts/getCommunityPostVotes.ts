@@ -3,14 +3,21 @@ import { PostVote } from "@/types/post";
 import { get, ref } from "firebase/database";
 
 /**
- * Kullanıcının belirli bir community içindeki tüm oylarını getirir.
+ * Retrieves all votes cast by a user within a specific community
+ * from Realtime Database.
  */
 export const getCommunityPostVotes = async (
   userId: string,
   communityId: string
 ): Promise<PostVote[]> => {
   try {
-    const snapshot = await get(ref(database, `postVotes/${userId}`));
+    if (!userId || !communityId) {
+      return [];
+    }
+
+    const snapshot = await get(
+      ref(database, `postVotes/${userId}`)
+    );
 
     if (!snapshot.exists()) {
       return [];
@@ -18,16 +25,22 @@ export const getCommunityPostVotes = async (
 
     const data = snapshot.val();
 
-    const postVotes: PostVote[] = Object.entries(data)
+    const votes: PostVote[] = Object.entries(data)
       .map(([id, value]) => ({
         id,
         ...(value as PostVote),
       }))
-      .filter((vote) => vote.communityId === communityId);
+      .filter(
+        (vote) =>
+          vote.communityId &&
+          vote.communityId === communityId
+      );
 
-    return postVotes;
+    return votes;
   } catch (error) {
-    console.error("getCommunityPostVotes:", error);
+    console.error("Error getting community post votes:", error);
     return [];
   }
 };
+
+export default getCommunityPostVotes;

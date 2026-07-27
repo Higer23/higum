@@ -1,12 +1,14 @@
-import { firestore } from "@/firebase/clientApp";
-import { deleteDoc, doc } from "firebase/firestore";
+import { database } from "@/firebase/clientApp";
+import { ref, remove } from "firebase/database";
 
 /**
- * Removes a previously saved post from a user's personal collection.
- * @param userId - The unique identifier of the user unsaving the post.
- * @param postId - The unique identifier of the post to be removed from the saved list.
- * @returns A promise that resolves when the saved post document is deleted.
+ * Removes a saved post from a user's saved posts in Realtime Database.
  */
-export const unsavePost = async (userId: string, postId: string) => {
-  await deleteDoc(doc(firestore, `users/${userId}/savedPosts`, postId));
+export const unsavePost = async (
+  userId: string,
+  postId: string
+): Promise<void> => {
+  await remove(
+    ref(database, `savedPosts/${userId}/${postId}`)
+  );
 };

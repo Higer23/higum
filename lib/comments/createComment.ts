@@ -1,28 +1,17 @@
-import { firestore } from "@/firebase/clientApp";
+import { database } from "@/firebase/clientApp";
 import { Comment } from "@/types/comment";
-import {
-  collection,
-  doc,
-  increment,
-  serverTimestamp,
-  Timestamp,
-  writeBatch,
-} from "firebase/firestore";
 import { User } from "firebase/auth";
+import {
+  get,
+  push,
+  ref,
+  runTransaction,
+  set,
+} from "firebase/database";
 
 /**
- * Creates a new comment on a post and updates the post's comment count.
- * This function supports threaded comments up to a maximum depth of 2.
- * All operations are performed in a Firestore batch to ensure atomicity.
- * @param user - The Firebase Auth user object of the comment creator.
- * @param communityId - The unique identifier of the community where the post resides.
- * @param postId - The unique identifier of the post being commented on.
- * @param postTitle - The title of the post, cached for display in user activity feeds.
- * @param commentText - The content of the comment.
- * @param depth - The nesting level of the comment (0 for top-level, 1 for reply, etc.).
- * @param parentId - The identifier of the parent comment if this is a reply.
- * @returns A promise that resolves to the newly created comment object.
- * @throws Error if the maximum comment depth is exceeded.
+ * Creates a new comment in Realtime Database
+ * and increases the post comment count.
  */
 export const createComment = async (
   user: User,
@@ -32,37 +21,47 @@ export const createComment = async (
   commentText: string,
   depth: number,
   parentId?: string
-) => {
+): Promise<Comment> => {
   if (depth > 2) {
     throw new Error(
       "Maximum comment depth reached. You cannot reply to this comment."
     );
   }
 
-  const batch = writeBatch(firestore);
-  const commentDocRef = doc(collection(firestore, "comments"));
+  const commentRef = push(ref(database, "comments"));
+
   const newComment: Comment = {
-    id: commentDocRef.id,
+    id: commentRef.key!,
     creatorId: user.uid,
-    creatorDisplayText: user.email!.split("@")[0],
-    communityId: communityId,
-    postId: postId,
-    postTitle: postTitle,
+    creatorDisplayText:
+      user.displayName ||
+      user.email?.split("@")[0] ||
+      "Anonymous",
+    communityId,
+    postId,
+    postTitle,
     text: commentText,
-    createdAt: serverTimestamp() as Timestamp,
-    parentId: parentId || undefined,
-    depth: depth,
+    createdAt: Date.now() as any,
+    depth,
   };
 
-  if (!parentId) delete newComment.parentId;
+  if (parentId) {
+    newComment.parentId = parentId;
+  }
 
-  batch.set(commentDocRef, newComment);
+  // Yorumu kaydet
+  await set(commentRef, newComment);
 
-  const postDocRef = doc(firestore, "posts", postId);
-  batch.update(postDocRef, {
-    numberOfComments: increment(1),
+  // numberOfComments artır
+  const postRef = ref(database, `posts/${postId}`);
+
+  await runTransaction(postRef, (post: any) => {
+    if (post) {
+      post.numberOfComments =
+        (post.numberOfComments || 0) + 1;
+    }
+    return post;
   });
 
-  await batch.commit();
   return newComment;
 };

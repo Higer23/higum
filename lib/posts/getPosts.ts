@@ -1,61 +1,47 @@
-import { firestore } from "@/firebase/clientApp";
+import { database } from "@/firebase/clientApp";
 import { Post } from "@/types/post";
-import {
-  collection,
-  DocumentData,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  QueryConstraint,
-  QueryDocumentSnapshot,
-  startAfter,
-  where,
-} from "firebase/firestore";
+import { get, ref } from "firebase/database";
 
-/**
- * Fetches a paginated list of posts based on various filtering criteria.
- * Supports fetching posts for a specific community, a personalized home feed for subscribed users,
- * or a generic home feed for guest users.
- * @param communityId - Optional identifier to fetch posts from a single community.
- * @param communityIds - Optional array of identifiers to fetch posts from multiple subscribed communities.
- * @param isGenericHome - Optional flag to fetch posts for the generic home feed (sorted by vote status).
- * @param lastVisible - Optional Firestore document snapshot for pagination.
- * @returns A promise that resolves to an object containing the array of posts and the next pagination cursor.
- */
 export const getPosts = async (
   communityId?: string,
   communityIds?: string[],
   isGenericHome?: boolean,
-  lastVisible?: QueryDocumentSnapshot<DocumentData> | null
+  lastVisible?: any
 ) => {
-  const constraints: QueryConstraint[] = [];
+  const snapshot = await get(ref(database, "posts"));
+
+  if (!snapshot.exists()) {
+    return {
+      posts: [],
+      newLastVisible: null,
+    };
+  }
+
+  const data = snapshot.val();
+
+  let posts: Post[] = Object.entries(data).map(([id, value]) => ({
+    id,
+    ...(value as Post),
+  }));
 
   if (communityId) {
-    constraints.push(where("communityId", "==", communityId));
-    constraints.push(orderBy("createTime", "desc"));
+    posts = posts.filter((post) => post.communityId === communityId);
   } else if (communityIds && communityIds.length > 0) {
-    constraints.push(where("communityId", "in", communityIds));
-    constraints.push(orderBy("createTime", "desc"));
-  } else if (isGenericHome) {
-    constraints.push(orderBy("voteStatus", "desc"));
+    posts = posts.filter((post) =>
+      communityIds.includes(post.communityId)
+    );
   }
 
-  if (lastVisible) {
-    constraints.push(startAfter(lastVisible));
+  if (isGenericHome) {
+    posts.sort((a, b) => (b.voteStatus || 0) - (a.voteStatus || 0));
+  } else {
+    posts.sort(
+      (a, b) => Number(b.createTime || 0) - Number(a.createTime || 0)
+    );
   }
 
-  constraints.push(limit(10));
-
-  const postQuery = query(collection(firestore, "posts"), ...constraints);
-  const postDocs = await getDocs(postQuery);
-  const posts = postDocs.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-  })) as Post[];
-
-  const newLastVisible =
-    postDocs.docs.length > 0 ? postDocs.docs[postDocs.docs.length - 1] : null;
-
-  return { posts, newLastVisible };
+  return {
+    posts: posts.slice(0, 10),
+    newLastVisible: null,
+  };
 };

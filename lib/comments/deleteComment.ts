@@ -1,37 +1,52 @@
 import { database } from "@/firebase/clientApp";
-import { get, ref, remove, runTransaction } from "firebase/database";
+import {
+  get,
+  ref,
+  remove,
+  runTransaction,
+} from "firebase/database";
 
 /**
- * Deletes a comment and all of its descendants from Realtime Database.
- * Also decreases the comment count on the related post.
+ * Deletes a comment and all of its descendants
+ * from Firebase Realtime Database.
+ * Updates the post comment count safely.
  */
 export const deleteComment = async (
   commentId: string,
   postId: string,
   descendantIds: string[]
 ): Promise<number> => {
-  const allIdsToDelete = [commentId, ...descendantIds];
+  try {
+    const allIdsToDelete = [
+      commentId,
+      ...descendantIds,
+    ];
 
-  // Yorumu ve alt yorumları sil
-  await Promise.all(
-    allIdsToDelete.map((id) =>
-      remove(ref(database, `comments/${id}`))
-    )
-  );
+    // Delete all comments
+    await Promise.all(
+      allIdsToDelete.map((id) =>
+        remove(ref(database, `comments/${id}`))
+      )
+    );
 
-  // numberOfComments değerini güncelle
-  const postRef = ref(database, `posts/${postId}`);
+    // Update comment counter
+    const postRef = ref(database, `posts/${postId}`);
 
-  await runTransaction(postRef, (post: any) => {
-    if (post) {
+    await runTransaction(postRef, (post: any) => {
+      if (!post) return post;
+
       post.numberOfComments = Math.max(
         0,
-        (post.numberOfComments || 0) - allIdsToDelete.length
+        (post.numberOfComments || 0) -
+          allIdsToDelete.length
       );
-    }
 
-    return post;
-  });
+      return post;
+    });
 
-  return allIdsToDelete.length;
+    return allIdsToDelete.length;
+  } catch (error) {
+    console.error("deleteComment:", error);
+    throw error;
+  }
 };

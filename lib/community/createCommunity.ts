@@ -13,64 +13,84 @@ export const createCommunity = async (
   communityName: string,
   communityType: string,
   userId: string
-) => {
-  const communityRef = ref(database, `communities/${communityName}`);
+): Promise<void> => {
+  const now = Date.now();
 
-  const result = await runTransaction(communityRef, (community: any) => {
-    if (community !== null) {
-      return;
+  const communityRef = ref(
+    database,
+    `communities/${communityName}`
+  );
+
+  try {
+    const result = await runTransaction(
+      communityRef,
+      (community: any) => {
+        if (community !== null) {
+          return;
+        }
+
+        return {
+          id: communityName,
+          name: communityName,
+
+          creatorId: userId,
+
+          createdAt: now,
+          updatedAt: now,
+
+          privacyType: communityType,
+
+          numberOfMembers: 1,
+          numberOfPosts: 0,
+          numberOfComments: 0,
+
+          voteStatus: 0,
+
+          description: "",
+          imageURL: "",
+          bannerURL: "",
+
+          rules: [],
+          tags: [],
+
+          verified: false,
+          nsfw: false,
+          archived: false,
+          locked: false,
+
+          lastPostAt: 0,
+
+          moderators: {
+            [userId]: true,
+          },
+        };
+      }
+    );
+
+    if (!result.committed) {
+      throw new Error(
+        `Sorry, /r/${communityName} is taken. Try another.`
+      );
     }
 
-    return {
-      id: communityName,
-      name: communityName,
+    await update(ref(database), {
+      [`communityMembers/${communityName}/${userId}`]: {
+        uid: userId,
+        communityId: communityName,
+        isAdmin: true,
+        joinedAt: now,
+      },
 
-      creatorId: userId,
-
-      createdAt: Date.now(),
-
-      privacyType: communityType,
-
-      numberOfMembers: 1,
-
-      numberOfPosts: 0,
-
-      description: "",
-
-      imageURL: "",
-
-      bannerURL: "",
-
-      rules: [],
-
-      tags: [],
-
-      verified: false,
-
-      nsfw: false,
-    };
-  });
-
-  if (!result.committed) {
-    throw new Error(
-      `Sorry, /r/${communityName} is taken. Try another.`
-    );
+      [`users/${userId}/communitySnippets/${communityName}`]: {
+        communityId: communityName,
+        isAdmin: true,
+        joinedAt: now,
+      },
+    });
+  } catch (error) {
+    console.error("createCommunity:", error);
+    throw error;
   }
-
-  await update(ref(database), {
-    [`communityMembers/${communityName}/${userId}`]: {
-      uid: userId,
-      communityId: communityName,
-      isAdmin: true,
-      joinedAt: Date.now(),
-    },
-
-    [`users/${userId}/communitySnippets/${communityName}`]: {
-      communityId: communityName,
-      isAdmin: true,
-      joinedAt: Date.now(),
-    },
-  });
 };
 
 export default createCommunity;

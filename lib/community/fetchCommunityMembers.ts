@@ -1,51 +1,57 @@
-import { firestore } from "@/firebase/clientApp";
-import { collection, doc, getDoc, getDocs } from "firebase/firestore";
+import { database } from "@/firebase/clientApp";
 import { CommunityMember } from "@/types/communityMember";
+import { get, ref } from "firebase/database";
 
 /**
- * Retrieves a list of all members belonging to a specific community.
- * Members are identified by the presence of a community snippet in their user profile.
- * The resulting list is sorted alphabetically by display name or email.
- * @param communityId - The unique identifier of the community.
- * @returns A promise that resolves to a sorted array of community member objects.
+ * Retrieves all members of a community from Realtime Database.
  */
 export const fetchCommunityMembers = async (
   communityId: string
 ): Promise<CommunityMember[]> => {
-  const usersSnapshot = await getDocs(collection(firestore, "users"));
+  try {
+    const snapshot = await get(
+      ref(database, `communityMembers/${communityId}`)
+    );
 
-  const members = await Promise.all(
-    usersSnapshot.docs.map(async (userDoc) => {
-      const snippetDoc = await getDoc(
-        doc(firestore, "users", userDoc.id, "communitySnippets", communityId)
-      );
+    if (!snapshot.exists()) {
+      return [];
+    }
 
-      if (!snippetDoc.exists()) {
-        return null;
-      }
+    const membersData = snapshot.val();
 
-      const data = userDoc.data() as {
-        email?: string;
-        displayName?: string | null;
-      };
+    const members = await Promise.all(
+      Object.keys(membersData).map(async (uid) => {
+        const userSnapshot = await get(
+          ref(database, `users/${uid}`)
+        );
 
-      return {
-        uid: userDoc.id,
-        email: data.email || "Unknown email",
-        displayName: data.displayName ?? null,
-      } satisfies CommunityMember;
-    })
-  );
+        const userData = userSnapshot.exists()
+          ? userSnapshot.val()
+          : {};
 
-  const filteredMembers = members.filter(
-    (member): member is CommunityMember => !!member
-  );
+        return {
+          uid,
+          email: userData.email || "Unknown email",
+          displayName: userData.displayName || null,
+          imageURL: userData.photoURL || "",
+          isAdmin: membersData[uid].isAdmin || false,
+          joinedAt: membersData[uid].joinedAt || 0,
+        } as CommunityMember;
+      })
+    );
 
-  filteredMembers.sort((a, b) => {
-    const nameA = (a.displayName || a.email).toLowerCase();
-    const nameB = (b.displayName || b.email).toLowerCase();
-    return nameA.localeCompare(nameB);
-  });
+    members.sort((a, b) => {
+      const nameA = (a.displayName || a.email).toLowerCase();
+      const nameB = (b.displayName || b.email).toLowerCase();
 
-  return filteredMembers;
+      return nameA.localeCompare(nameB);
+    });
+
+    return members;
+  } catch (error) {
+    console.error("fetchCommunityMembers:", error);
+    return [];
+  }
 };
+
+export default fetchCommunityMembers;

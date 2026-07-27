@@ -1,85 +1,184 @@
-import { firestore, storage } from "@/firebase/clientApp";
+import { database, storage } from "@/firebase/clientApp";
 import { Community } from "@/types/community";
 import {
-  collection,
-  collectionGroup,
-  doc,
-  DocumentReference,
-  getDocs,
-  query,
-  where,
-  writeBatch,
-} from "firebase/firestore";
-import { deleteObject, ref } from "firebase/storage";
+  get,
+  ref,
+  remove,
+  update,
+} from "firebase/database";
+import {
+  deleteObject,
+  ref as storageRef,
+} from "firebase/storage";
 
 /**
- * Performs a cascading deletion of a community and all its associated data.
- * This includes deleting the community document, all posts, comments, post images,
- * the community image, and all user membership snippets.
- * Deletions are performed in chunked batches to respect Firestore limits.
- * @param communityData - The community object containing the ID and image URL to be deleted.
- * @returns A promise that resolves when all associated data has been successfully removed.
+ * Deletes an entire community and all related data
+ * from Realtime Database.
  */
-export const deleteCommunity = async (communityData: Community) => {
-  const postsQuery = query(
-    collection(firestore, "posts"),
-    where("communityId", "==", communityData.id)
-  );
-  const postsSnapshot = await getDocs(postsQuery);
+export const deleteCommunity = async (
+  communityData: Community
+) => {
+  const updates: Record<string, null> = {};
 
-  const deletePostImagePromises: Promise<void>[] = [];
-  postsSnapshot.docs.forEach((doc) => {
-    const post = doc.data();
-    if (post.imageURL) {
-      const imageRef = ref(storage, `posts/${post.id}/image`);
-      deletePostImagePromises.push(deleteObject(imageRef));
-    }
-  });
-  await Promise.all(deletePostImagePromises);
+  /* ------------------------------------ */
+  /* Delete community image */
+  /* ------------------------------------ */
 
   if (communityData.imageURL) {
-    const imageRef = ref(storage, `communities/${communityData.id}/image`);
-    await deleteObject(imageRef).catch((e) =>
-      console.log("Error deleting community image", e)
-    );
-  }
-
-  let docsToDelete: DocumentReference[] = [];
-  docsToDelete.push(doc(firestore, "communities", communityData.id));
-  postsSnapshot.docs.forEach((d) => docsToDelete.push(d.ref));
-
-  for (const postDoc of postsSnapshot.docs) {
-    const commentsQuery = query(
-      collection(firestore, "comments"),
-      where("postId", "==", postDoc.id)
-    );
-    const commentsSnapshot = await getDocs(commentsQuery);
-    commentsSnapshot.docs.forEach((d) => docsToDelete.push(d.ref));
-  }
-
-  const snippetsQuery = query(
-    collectionGroup(firestore, "communitySnippets"),
-    where("communityId", "==", communityData.id)
-  );
-  const snippetsSnapshot = await getDocs(snippetsQuery);
-  snippetsSnapshot.docs.forEach((d) => docsToDelete.push(d.ref));
-
-  const chunkArray = (arr: any[], size: number) => {
-    const chunked_arr = [];
-    let index = 0;
-    while (index < arr.length) {
-      chunked_arr.push(arr.slice(index, size + index));
-      index += size;
+    try {
+      await deleteObject(
+        storageRef(
+          storage,
+          `communities/${communityData.id}/image`
+        )
+      );
+    } catch (e) {
+      console.log("Community image not found");
     }
-    return chunked_arr;
-  };
-
-  const chunks = chunkArray(docsToDelete, 450);
-  for (const chunk of chunks) {
-    const batch = writeBatch(firestore);
-    chunk.forEach((docRef: DocumentReference) => {
-      batch.delete(docRef);
-    });
-    await batch.commit();
   }
+
+  /* ------------------------------------ */
+  /* Delete all posts */
+  /* ------------------------------------ */
+
+  const postsSnapshot = await get(ref(database, "posts"));
+
+  if (postsSnapshot.exists()) {
+    const posts = postsSnapshot.val();
+
+    for (const postId in posts) {
+      const post = posts[postId];
+
+      if (post.communityId !== communityData.id) continue;
+
+      if (post.imageURL) {
+        try {
+          await deleteObject(
+            storageRef(
+              storage,
+              `posts/${postId}/image`
+            )
+          );
+        } catch {}
+      }
+
+      updates[`posts/${postId}`] = null;
+
+      /* Delete comments of this post */
+
+      const commentsSnapshot = await get(
+        ref(database, "comments")
+      );
+
+      if (commentsSnapshot.exists()) {
+        const comments = commentsSnapshot.val();
+
+        for (const commentId in comments) {
+          if (comments[commentId].postId === postId) {
+            updates[`comments/${commentId}`] = null;
+          }
+        }
+      }
+
+      /* Delete votes */
+
+      const votesSnapshot = await get(
+        ref(database, "postVotes")
+      );
+
+      if (votesSnapshot.exists()) {
+        const usersVotes = votesSnapshot.val();
+
+        for (const uid in usersVotes) {
+          const votes = usersVotes[uid];
+
+          for (const voteId in votes) {
+            if (votes[voteId].postId === postId) {
+              updates[
+                `postVotes/${uid}/${voteId}`
+              ] = null;
+            }
+          }
+        }
+      }
+
+      /* Delete saved posts */
+
+      const savedSnapshot = await get(
+        ref(database, "savedPosts")
+      );
+
+      if (savedSnapshot.exists()) {
+        const usersSaved = savedSnapshot.val();
+
+        for (const uid in usersSaved) {
+          if (usersSaved[uid][postId]) {
+            updates[
+              `savedPosts/${uid}/${postId}`
+            ] = null;
+          }
+        }
+      }
+
+      /* Delete notifications */
+
+      const notificationSnapshot = await get(
+        ref(database, "notifications")
+      );
+
+      if (notificationSnapshot.exists()) {
+        const notifications =
+          notificationSnapshot.val();
+
+        for (const uid in notifications) {
+          for (const id in notifications[uid]) {
+            if (
+              notifications[uid][id].postId === postId
+            ) {
+              updates[
+                `notifications/${uid}/${id}`
+              ] = null;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /* ------------------------------------ */
+  /* Delete community members */
+  /* ------------------------------------ */
+
+  const membersSnapshot = await get(
+    ref(
+      database,
+      `communityMembers/${communityData.id}`
+    )
+  );
+
+  if (membersSnapshot.exists()) {
+    const members = membersSnapshot.val();
+
+    for (const uid in members) {
+      updates[
+        `users/${uid}/communitySnippets/${communityData.id}`
+      ] = null;
+    }
+  }
+
+  updates[
+    `communityMembers/${communityData.id}`
+  ] = null;
+
+  /* ------------------------------------ */
+  /* Delete community */
+  /* ------------------------------------ */
+
+  updates[
+    `communities/${communityData.id}`
+  ] = null;
+
+  await update(ref(database), updates);
 };
+
+export default deleteCommunity;

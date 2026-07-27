@@ -18,19 +18,16 @@ type PostsProps = {
   communityData: Community;
 };
 
-/**
- * Manages and displays a feed of posts for a specific community.
- * Handles infinite scrolling, post selection, voting, and deletion by coordinating multiple hooks.
- * @param communityData - The community context for which to load and display posts.
- * @returns A scrollable list of post items or a loading state.
- */
 const Posts: React.FC<PostsProps> = ({ communityData }) => {
   const [user] = useAuthState(auth);
+
   const { postStateValue, setPostStateValue } = usePostState();
   const { onSelectPost } = usePostSelection(setPostStateValue);
   const { onVote } = usePostVote(postStateValue, setPostStateValue);
   const { onDeletePost } = usePostDeletion(setPostStateValue);
+
   usePostVoteSync(setPostStateValue);
+
   const { isAdmin, canPost } = useCommunityPermissions(communityData);
 
   const { loading, fetchPosts, noMorePosts } = usePostsFeed({
@@ -38,18 +35,15 @@ const Posts: React.FC<PostsProps> = ({ communityData }) => {
   });
 
   useEffect(() => {
-    fetchPosts(true);
+    fetchPosts();
   }, [communityData]);
 
   return (
     <>
-      {/* If loading is true and it's the initial load (no posts yet), display the post loader component */}
       {loading && postStateValue.posts.length === 0 ? (
         <PostLoader />
       ) : (
-        // If the posts are available, display the post item components
         <Stack gap={3}>
-          {/* For each post (item) iterebly create a post car component */}
           {postStateValue.posts.map((item) => (
             <PostItem
               key={item.id}
@@ -57,8 +51,9 @@ const Posts: React.FC<PostsProps> = ({ communityData }) => {
               userIsCreator={user?.uid === item.creatorId}
               userIsAdmin={isAdmin}
               userVoteValue={
-                postStateValue.postVotes.find((vote) => vote.postId === item.id)
-                  ?.voteValue
+                postStateValue.postVotes.find(
+                  (vote) => vote.postId === item.id
+                )?.voteValue
               }
               onVote={onVote}
               onSelectPost={onSelectPost}
@@ -66,9 +61,10 @@ const Posts: React.FC<PostsProps> = ({ communityData }) => {
               votingDisabled={!canPost}
             />
           ))}
+
           {!noMorePosts ? (
             <Button
-              onClick={() => fetchPosts(false)}
+              onClick={() => fetchPosts()}
               loading={loading}
               variant="outline"
               width="100%"
@@ -86,4 +82,5 @@ const Posts: React.FC<PostsProps> = ({ communityData }) => {
     </>
   );
 };
+
 export default Posts;

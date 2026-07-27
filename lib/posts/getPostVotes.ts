@@ -1,37 +1,33 @@
-import { firestore } from "@/firebase/clientApp";
+import { database } from "@/firebase/clientApp";
 import { PostVote } from "@/types/post";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { get, ref } from "firebase/database";
 
 /**
- * Retrieves the voting status for a specific set of posts for a given user.
- * This function handles large sets of post IDs by chunking them into batches to comply with Firestore's 'in' query limits.
- * @param userId - The unique identifier of the user whose votes are being retrieved.
- * @param postIds - An array of post identifiers to check for votes.
- * @returns A promise that resolves to an array of post vote objects for the specified posts.
+ * Kullanıcının belirtilen postlara verdiği oyları getirir.
  */
-export const getPostVotes = async (userId: string, postIds: string[]) => {
-  const chunks = [];
-  const chunkSize = 10;
-  for (let i = 0; i < postIds.length; i += chunkSize) {
-    chunks.push(postIds.slice(i, i + chunkSize));
+export const getPostVotes = async (
+  userId: string,
+  postIds: string[]
+): Promise<PostVote[]> => {
+  try {
+    const snapshot = await get(ref(database, `postVotes/${userId}`));
+
+    if (!snapshot.exists()) {
+      return [];
+    }
+
+    const data = snapshot.val();
+
+    const votes: PostVote[] = Object.entries(data)
+      .map(([id, value]) => ({
+        id,
+        ...(value as PostVote),
+      }))
+      .filter((vote) => postIds.includes(vote.postId));
+
+    return votes;
+  } catch (error) {
+    console.error("getPostVotes:", error);
+    return [];
   }
-
-  const promises = chunks.map((chunk) => {
-    const postVotesQuery = query(
-      collection(firestore, `users/${userId}/postVotes`),
-      where("postId", "in", chunk)
-    );
-    return getDocs(postVotesQuery);
-  });
-
-  const querySnapshots = await Promise.all(promises);
-
-  const postVotes = querySnapshots.flatMap((snapshot) =>
-    snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }))
-  );
-
-  return postVotes as PostVote[];
 };

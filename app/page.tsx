@@ -54,7 +54,7 @@ export default function Home() {
    */
   useEffect(() => {
     if (communityStateValue.snippetFetched) {
-      fetchPosts(true);
+      fetchPosts();
     }
   }, [communityStateValue.snippetFetched, user, communityIds.length]);
 

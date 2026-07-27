@@ -1,39 +1,80 @@
-import { firestore, storage } from "@/firebase/clientApp";
+import { database, storage } from "@/firebase/clientApp";
 import { Post } from "@/types/post";
-import {
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  query,
-  where,
-  writeBatch,
-} from "firebase/firestore";
-import { deleteObject, ref } from "firebase/storage";
+import { ref as dbRef, remove, get } from "firebase/database";
+import { deleteObject, ref as storageRef } from "firebase/storage";
 
 /**
- * Deletes a post and all its associated data, including the image in Storage and all comments in Firestore.
- * This ensures that no orphaned data remains after a post is removed.
- * @param post - The post object to be deleted, containing its ID and optional image URL.
- * @returns A promise that resolves when the post and all its related data have been successfully deleted.
+ * Deletes a post and all related data from Realtime Database.
  */
-export const deletePost = async (post: Post) => {
-  if (post.imageURL) {
-    const imageRef = ref(storage, `posts/${post.id}/image`);
-    await deleteObject(imageRef);
+export const deletePost = async (post: Post): Promise<void> => {
+  if (!post.id) {
+    throw new Error("Post ID is missing.");
   }
 
-  const postDocRef = doc(firestore, "posts", post.id!);
-  await deleteDoc(postDocRef);
+  // Resmi sil
+  if (post.imageURL) {
+    try {
+      await deleteObject(storageRef(storage, `posts/${post.id}/image`));
+    } catch (error) {
+      console.warn("Image already deleted or not found.", error);
+    }
+  }
 
-  const commentsQuery = query(
-    collection(firestore, "comments"),
-    where("postId", "==", post.id)
-  );
-  const commentDocs = await getDocs(commentsQuery);
-  const batch = writeBatch(firestore);
-  commentDocs.docs.forEach((d) => {
-    batch.delete(d.ref);
-  });
-  await batch.commit();
+  // Postu sil
+  await remove(dbRef(database, `posts/${post.id}`));
+
+  // Yorumlari sil
+  const commentsSnapshot = await get(dbRef(database, "comments"));
+
+  if (commentsSnapshot.exists()) {
+    const comments = commentsSnapshot.val();
+
+    const deletePromises: Promise<void>[] = [];
+
+    Object.entries(comments).forEach(([commentId, value]: any) => {
+      if (value.postId === post.id) {
+        deletePromises.push(
+          remove(dbRef(database, `comments/${commentId}`))
+        );
+      }
+    });
+
+    await Promise.all(deletePromises);
+  }
+
+  // Vote kayıtlarını sil
+  const votesSnapshot = await get(dbRef(database, "postVotes"));
+
+  if (votesSnapshot.exists()) {
+    const votes = votesSnapshot.val();
+
+    const deleteVotePromises: Promise<void>[] = [];
+
+    Object.entries(votes).forEach(([voteId, value]: any) => {
+      if (value.postId === post.id) {
+        deleteVotePromises.push(
+          remove(dbRef(database, `postVotes/${voteId}`))
+        );
+      }
+    });
+
+    await Promise.all(deleteVotePromises);
+  }
+
+  // Kaydedilen postlardan sil
+  const savedSnapshot = await get(dbRef(database, "savedPosts"));
+
+  if (savedSnapshot.exists()) {
+    const users = savedSnapshot.val();
+
+    const deleteSavedPromises: Promise<void>[] = [];
+
+    Object.keys(users).forEach((uid) => {
+      deleteSavedPromises.push(
+        remove(dbRef(database, `savedPosts/${uid}/${post.id}`))
+      );
+    });
+
+    await Promise.all(deleteSavedPromises);
+  }
 };

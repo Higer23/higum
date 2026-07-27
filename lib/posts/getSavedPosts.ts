@@ -3,27 +3,32 @@ import { SavedPost } from "@/types/savedPost";
 import { get, ref } from "firebase/database";
 
 /**
- * Retrieves all posts saved by a user from Realtime Database.
+ * Retrieves all saved posts for a user from Firebase Realtime Database.
  */
 export const getSavedPosts = async (
   userId: string
 ): Promise<SavedPost[]> => {
-  const snapshot = await get(
-    ref(database, `savedPosts/${userId}`)
-  );
+  try {
+    const snapshot = await get(
+      ref(database, `savedPosts/${userId}`)
+    );
 
-  if (!snapshot.exists()) {
+    if (!snapshot.exists()) {
+      return [];
+    }
+
+    const data = snapshot.val();
+
+    const savedPosts: SavedPost[] = Object.entries(data).map(
+      ([id, value]) => ({
+        id,
+        ...(value as SavedPost),
+      })
+    );
+
+    return savedPosts;
+  } catch (error) {
+    console.error("getSavedPosts:", error);
     return [];
   }
-
-  const data = snapshot.val();
-
-  const savedPosts: SavedPost[] = Object.entries(data).map(
-    ([id, value]) => ({
-      id,
-      ...(value as SavedPost),
-    })
-  );
-
-  return savedPosts;
 };

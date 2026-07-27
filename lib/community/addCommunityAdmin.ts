@@ -1,47 +1,76 @@
-import { firestore } from "@/firebase/clientApp";
-import { arrayUnion, doc, increment, runTransaction } from "firebase/firestore";
+import { database } from "@/firebase/clientApp";
+import {
+  ref,
+  get,
+  update,
+  runTransaction,
+} from "firebase/database";
 
 /**
- * Promotes a user to an admin role within a specific community.
- * This function updates the community's admin list and the user's membership snippet.
- * If the user is not already a member, they are joined to the community as an admin.
- * @param communityId - The unique identifier of the community.
- * @param userId - The unique identifier of the user to be promoted.
- * @param communityImageURL - Optional URL for the community's image to be stored in the snippet.
- * @returns A promise that resolves when the promotion transaction is complete.
+ * Promotes a user to administrator in a community.
+ * If the user is not already a member,
+ * they are added automatically.
  */
 export const addCommunityAdmin = async (
   communityId: string,
   userId: string,
   communityImageURL?: string
 ): Promise<void> => {
-  await runTransaction(firestore, async (transaction) => {
-    const communityRef = doc(firestore, "communities", communityId);
-    const snippetRef = doc(
-      firestore,
-      `users/${userId}/communitySnippets/${communityId}`
+  const now = Date.now();
+
+  try {
+    const memberRef = ref(
+      database,
+      `communityMembers/${communityId}/${userId}`
     );
 
-    const snippetDoc = await transaction.get(snippetRef);
+    const memberSnapshot = await get(memberRef);
 
-    transaction.update(communityRef, {
-      adminIds: arrayUnion(userId),
-    });
+    // Kullanıcı üye değilse oluştur
+    if (!memberSnapshot.exists()) {
+      await update(ref(database), {
+        [`communityMembers/${communityId}/${userId}`]: {
+          uid: userId,
+          communityId,
+          imageURL: communityImageURL || "",
+          isAdmin: true,
+          joinedAt: now,
+          status: "active",
+        },
 
-    if (snippetDoc.exists()) {
-      transaction.update(snippetRef, {
-        isAdmin: true,
+        [`users/${userId}/communitySnippets/${communityId}`]: {
+          communityId,
+          imageURL: communityImageURL || "",
+          isAdmin: true,
+          joinedAt: now,
+        },
       });
+
+      // Üye sayısını artır
+      await runTransaction(
+        ref(
+          database,
+          `communities/${communityId}/numberOfMembers`
+        ),
+        (count: any) => (count || 0) + 1
+      );
     } else {
-      transaction.set(snippetRef, {
-        communityId: communityId,
-        imageURL: communityImageURL || "",
-        isAdmin: true,
-      });
+      // Zaten üyeyse sadece admin yap
+      await update(ref(database), {
+        [`communityMembers/${communityId}/${userId}/isAdmin`]: true,
 
-      transaction.update(communityRef, {
-        numberOfMembers: increment(1),
+        [`users/${userId}/communitySnippets/${communityId}/isAdmin`]: true,
       });
     }
-  });
+
+    // Moderatör listesine ekle
+    await update(ref(database), {
+      [`communities/${communityId}/moderators/${userId}`]: true,
+    });
+  } catch (error) {
+    console.error("addCommunityAdmin:", error);
+    throw error;
+  }
 };
+
+export default addCommunityAdmin;

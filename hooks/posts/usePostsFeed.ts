@@ -40,9 +40,10 @@ const usePostsFeed = ({
         posts: posts as Post[],
       }));
 
-      setNoMorePosts(true);
+      // Eğer 10'dan az post geldiyse daha fazla yok demektir.
+      setNoMorePosts(posts.length < 10);
     } catch (error: any) {
-      console.error(error);
+      console.error("Error fetching posts:", error);
 
       showToast({
         title: "Could not Fetch Posts",

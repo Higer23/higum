@@ -6,47 +6,55 @@ import {
   ref as dbRef,
   push,
   set,
-  serverTimestamp,
+  update,
 } from "firebase/database";
 
 export const createPost = async (
   user: User,
   communityId: string,
-  communityImageURL: string |undefined,
+  communityImageURL: string | undefined,
   postData: {
     title: string;
     body: string;
   },
   selectedFile?: string
 ) => {
-  const postRef = push(dbRef(database, "posts"));
+  try {
+    const postRef = push(dbRef(database, "posts"));
 
-  const newPost: Post = {
-    communityId,
-    communityImageURL: communityImageURL || "",
-    creatorId: user.uid,
-    creatorUsername: user.displayName || user.email!.split("@")[0],
-    title: postData.title,
-    body: postData.body,
-    numberOfComments: 0,
-    voteStatus: 0,
-    createTime: Date.now() as any,
-  };
+    const postId = postRef.key!;
 
-  await set(postRef, newPost);
+    const newPost: Post = {
+      id: postId,
+      communityId,
+      communityImageURL: communityImageURL ?? "",
+      creatorId: user.uid,
+      creatorUsername:
+        user.displayName ?? user.email?.split("@")[0] ?? "Unknown",
+      title: postData.title.trim(),
+      body: postData.body.trim(),
+      numberOfComments: 0,
+      voteStatus: 0,
+      createTime: Date.now(),
+    };
 
-  if (selectedFile) {
-    const imageRef = ref(storage, `posts/${postRef.key}/image`);
+    await set(postRef, newPost);
 
-    await uploadString(imageRef, selectedFile, "data_url");
+    if (selectedFile) {
+      const imageRef = ref(storage, `posts/${postId}/image`);
 
-    const downloadURL = await getDownloadURL(imageRef);
+      await uploadString(imageRef, selectedFile, "data_url");
 
-    await set(
-      dbRef(database, `posts/${postRef.key}/imageURL`),
-      downloadURL
-    );
+      const imageURL = await getDownloadURL(imageRef);
+
+      await update(dbRef(database, `posts/${postId}`), {
+        imageURL,
+      });
+    }
+
+    return postId;
+  } catch (error) {
+    console.error("createPost:", error);
+    throw error;
   }
-
-  return postRef.key;
 };

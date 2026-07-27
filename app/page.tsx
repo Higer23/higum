@@ -19,27 +19,25 @@ import { Button, Stack, Text } from "@chakra-ui/react";
 import { useEffect, useMemo } from "react";
 import { useAuthState } from "react-firebase-hooks/auth";
 
-/**
- * The main landing page of the application.
- * Displays a personalized feed of posts for authenticated users or a generic popular feed for guests.
- * Includes a sidebar with community recommendations and personal shortcuts.
- * @returns The home page component with infinite scrolling posts.
- */
 export default function Home() {
   const [user, loadingUser] = useAuthState(auth);
+
   const { communityStateValue } = useCommunityState();
   const { postStateValue, setPostStateValue } = usePostState();
+
   const { onSelectPost } = usePostSelection(setPostStateValue);
   const { onVote, getPostVotes } = usePostVote(
     postStateValue,
     setPostStateValue
   );
+
   const { onDeletePost } = usePostDeletion(setPostStateValue);
+
   usePostVoteSync(setPostStateValue);
-  const showToast = useCustomToast();
+  useCustomToast();
 
   const communityIds = useMemo(
-    () => communityStateValue.mySnippets.map((snippet) => snippet.communityId),
+    () => communityStateValue.mySnippets.map((s) => s.communityId),
     [communityStateValue.mySnippets]
   );
 
@@ -48,33 +46,22 @@ export default function Home() {
     isGenericHome: !user || communityIds.length === 0,
   });
 
-  /**
-   * Loads the home feed for authenticated users.
-   * Runs when the community snippets have been fetched when the user
-   */
   useEffect(() => {
     if (communityStateValue.snippetFetched) {
       fetchPosts();
     }
   }, [communityStateValue.snippetFetched, user, communityIds.length]);
 
-  /**
-   * Loads the home feed for unauthenticated users.
-   * Runs when there is no user and the system is no longer attempting to fetch a user.
-   * While the system is attempting to fetch user, the user is null.
-   */
   useEffect(() => {
     if (!user && !loadingUser) {
-      fetchPosts(true);
+      fetchPosts();
     }
   }, [user, loadingUser]);
 
-  /**
-   * Posts need to exist before trying to fetch votes for posts
-   */
   useEffect(() => {
     if (user && postStateValue.posts.length) {
       const postIds = postStateValue.posts.map((post) => post.id!);
+
       getPostVotes(postIds);
 
       return () => {
@@ -90,6 +77,7 @@ export default function Home() {
     <PageContent>
       <>
         <CreatePostLink />
+
         {loading && postStateValue.posts.length === 0 ? (
           <PostLoader />
         ) : (
@@ -112,12 +100,13 @@ export default function Home() {
                     (snippet) => snippet.communityId === post.communityId
                   )?.isAdmin
                 }
-                showCommunityImage={true}
+                showCommunityImage
               />
             ))}
+
             {!noMorePosts ? (
               <Button
-                onClick={() => fetchPosts(false)}
+                onClick={() => fetchPosts()}
                 loading={loading}
                 variant="outline"
                 width="100%"
@@ -133,6 +122,7 @@ export default function Home() {
           </Stack>
         )}
       </>
+
       <Stack gap={2}>
         <Recommendations />
         <PersonalHome />

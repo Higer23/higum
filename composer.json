@@ -1,47 +1,47 @@
 {
-    "name": "flarum/flarum",
+    "name": "higum/higum",
     "description": "Delightfully simple forum software.",
     "type": "project",
     "keywords": [
         "forum",
         "discussion"
     ],
-    "homepage": "https://flarum.org/",
+    "homepage": "https://higum.org/",
     "license": "MIT",
     "authors": [
         {
-            "name": "Flarum",
-            "email": "info@flarum.org",
-            "homepage": "https://flarum.org/team"
+            "name": "Higum",
+            "email": "info@higum.org",
+            "homepage": "https://higum.org/team"
         }
     ],
     "support": {
-        "issues": "https://github.com/flarum/core/issues",
-        "source": "https://github.com/flarum/flarum",
-        "docs": "https://docs.flarum.org/"
+        "issues": "https://github.com/higum/core/issues",
+        "source": "https://github.com/higum/higum",
+        "docs": "https://docs.higum.org/"
     },
     "require": {
-        "flarum/core": "^2.0.0",
-        "flarum/audit": "*",
-        "flarum/approval": "*",
-        "flarum/bbcode": "*",
-        "flarum/emoji": "*",
-        "flarum/deck": "*",
-        "flarum/lang-english": "*",
-        "flarum/flags": "*",
-        "flarum/gdpr": "*",
-        "flarum/likes": "*",
-        "flarum/lock": "*",
-        "flarum/markdown": "*",
-        "flarum/mentions": "*",
-        "flarum/messages": "*",
-        "flarum/nicknames": "*",
-        "flarum/realtime": "*",
-        "flarum/statistics": "*",
-        "flarum/sticky": "*",
-        "flarum/subscriptions": "*",
-        "flarum/suspend": "*",
-        "flarum/tags": "*"
+        "higum/core": "^2.0.0",
+        "higum/audit": "*",
+        "higum/approval": "*",
+        "higum/bbcode": "*",
+        "higum/emoji": "*",
+        "higum/deck": "*",
+        "higum/lang-english": "*",
+        "higum/flags": "*",
+        "higum/gdpr": "*",
+        "higum/likes": "*",
+        "higum/lock": "*",
+        "higum/markdown": "*",
+        "higum/mentions": "*",
+        "higum/messages": "*",
+        "higum/nicknames": "*",
+        "higum/realtime": "*",
+        "higum/statistics": "*",
+        "higum/sticky": "*",
+        "higum/subscriptions": "*",
+        "higum/suspend": "*",
+        "higum/tags": "*"
     },
     "config": {
         "preferred-install": "dist",
